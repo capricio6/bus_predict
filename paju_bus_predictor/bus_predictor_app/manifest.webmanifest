@@ -1,0 +1,31 @@
+{
+  "name": "파주 버스 관측 예측",
+  "short_name": "파주버스",
+  "description": "정류소, 노선, 도착정보를 보고 실제 도착 기록으로 예측을 보정하는 파주 버스 앱",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f7f2",
+  "theme_color": "#157e5c",
+  "icons": [
+    {
+      "src": "/icons/paju-bus-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/paju-bus-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/paju-bus-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

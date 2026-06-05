@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#157e5c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="파주버스" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>파주 버스 관측 예측</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/paju-bus-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/paju-bus-icon-192.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #f6f7f2;
+      --panel: #ffffff;
+      --ink: #18211d;
+      --muted: #607064;
+      --line: #d7ded2;
+      --brand: #157e5c;
+      --brand-dark: #0e5f46;
+      --warn: #b95c16;
+      --blue: #2367a2;
+      --red: #b93535;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 390px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      overflow: auto;
+      max-height: 100vh;
+    }
+    main { min-width: 0; display: grid; grid-template-rows: 58vh 1fr; }
+    .brand {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(21, 126, 92, .22);
+      flex: 0 0 auto;
+    }
+    h1 { margin: 0; font-size: 22px; letter-spacing: 0; }
+    .brand-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    h2 { font-size: 15px; margin: 18px 0 8px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    input, button {
+      font: inherit;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      min-height: 38px;
+    }
+    input { width: 100%; padding: 8px 10px; background: #fbfcfa; color: var(--ink); }
+    button {
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+      padding: 7px 10px;
+      white-space: nowrap;
+    }
+    button.secondary { background: #edf3ee; color: var(--brand-dark); border-color: #c8d8ce; }
+    button.warn { background: var(--warn); border-color: var(--warn); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .row { display: flex; gap: 8px; align-items: end; }
+    .row > * { flex: 1; }
+    .row button { flex: 0 0 auto; }
+    .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfa;
+      padding: 10px;
+    }
+    .item.selected { border-color: var(--brand); box-shadow: inset 3px 0 0 var(--brand); }
+    .item-title { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+    .item-sub { color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.4; }
+    .toolbar { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+    #map { min-height: 360px; width: 100%; background: #e8eee8; }
+    .bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+      border-top: 1px solid var(--line);
+      min-height: 0;
+    }
+    .pane {
+      padding: 16px;
+      overflow: auto;
+      min-height: 0;
+    }
+    .pane + .pane { border-left: 1px solid var(--line); }
+    .arrival-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 10px;
+    }
+    .arrival {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .route-no { color: var(--blue); font-size: 20px; font-weight: 800; }
+    .eta { margin-top: 6px; font-size: 30px; font-weight: 800; }
+    .eta small { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .adjust { color: var(--brand-dark); font-weight: 700; }
+    .danger { color: var(--red); }
+    .status {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #edf3ee;
+      color: var(--brand-dark);
+      font-size: 12px;
+      margin: 2px 3px 2px 0;
+    }
+    .bus-pin {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      border: 3px solid #fff;
+      box-shadow: 0 8px 18px rgba(24, 33, 29, .24);
+    }
+    .bus-pin.first { background: var(--red); }
+    .bus-pin.second { background: var(--blue); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      aside { max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+      main { grid-template-rows: 52vh auto; }
+      .bottom { grid-template-columns: 1fr; }
+      .pane + .pane { border-left: 0; border-top: 1px solid var(--line); }
+    }
+    @media (max-width: 560px) {
+      aside { padding: 14px; }
+      main { grid-template-rows: 48vh auto; }
+      #map { min-height: 300px; }
+      .row { align-items: stretch; }
+      .row button { min-width: 86px; }
+      .arrival-grid { grid-template-columns: 1fr; }
+      .eta { font-size: 26px; }
+      table { font-size: 12px; }
+      th, td { padding: 7px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">
+        <img src="/icons/paju-bus-icon.svg" alt="" />
+        <div>
+          <h1>파주 버스 관측 예측</h1>
+          <div class="brand-sub">휴대폰 홈 화면에 추가해서 쓰는 내 정류소 예측 앱</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="stationKeyword">정류소명 또는 번호</label>
+          <input id="stationKeyword" value="운정" autocomplete="off" />
+        </div>
+        <button id="searchStations">검색</button>
+      </div>
+      <div class="toolbar">
+        <button class="secondary" id="nearMe">내 주변</button>
+        <button class="secondary" id="clearData">관측 초기화</button>
+      </div>
+      <div class="status" id="status">정류소를 검색하면 경유 노선과 도착정보를 불러옵니다.</div>
+
+      <h2>정류소</h2>
+      <div class="list" id="stations"></div>
+
+      <h2>경유 노선</h2>
+      <div class="list" id="routes"></div>
+    </aside>
+
+    <main>
+      <div id="map"></div>
+      <section class="bottom">
+        <div class="pane">
+          <div class="row">
+            <div>
+              <h2 id="arrivalTitle">도착정보</h2>
+              <div class="status" id="selectedText">아직 선택된 정류소가 없습니다.</div>
+            </div>
+            <button id="refreshArrival" disabled>새로고침</button>
+          </div>
+          <div class="arrival-grid" id="arrivals"></div>
+        </div>
+        <div class="pane">
+          <h2>파주 이동시간 시뮬레이션</h2>
+          <div class="mini-grid">
+            <div>
+              <label for="moveMin">평균 구간 이동</label>
+              <input id="moveMin" type="number" min="0.5" step="0.1" value="2.3" />
+            </div>
+            <div>
+              <label for="dwellMin">평균 정차</label>
+              <input id="dwellMin" type="number" min="0.1" step="0.05" value="0.45" />
+            </div>
+          </div>
+          <div class="status">API의 남은 정류장 수가 있을 때, 위 평균값으로 보조 예상시간을 계산합니다. 실제 도착 버튼을 누르면 같은 정류소/노선의 오차 평균이 다음 예측에 반영됩니다.</div>
+          <h2>관측 기록</h2>
+          <table>
+            <thead><tr><th>노선</th><th>건수</th><th>평균 보정</th><th>최근</th></tr></thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      station: null,
+      routes: [],
+      route: null,
+      routeLine: [],
+      routeStops: [],
+      arrivals: [],
+      watches: JSON.parse(localStorage.getItem("pajuBusWatches") || "{}"),
+      history: JSON.parse(localStorage.getItem("pajuBusHistory") || "{}"),
+      map: null,
+      layers: [],
+    };
+
+    const field = (obj, names, fallback = "") => {
+      for (const name of names) {
+        if (obj && obj[name] !== undefined && obj[name] !== null && obj[name] !== "") return obj[name];
+      }
+      return fallback;
+    };
+    const num = (value) => {
+      const parsed = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const save = () => {
+      localStorage.setItem("pajuBusWatches", JSON.stringify(state.watches));
+      localStorage.setItem("pajuBusHistory", JSON.stringify(state.history));
+    };
+    const setStatus = (text) => $("status").textContent = text;
+
+    async function api(name, params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const res = await fetch(`/api/${name}?${query}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "API 요청에 실패했습니다.");
+      return data.rows || [];
+    }
+
+    function initMap() {
+      state.map = L.map("map", { zoomControl: true }).setView([37.7599, 126.7799], 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(state.map);
+    }
+
+    function clearMap() {
+      state.layers.forEach((layer) => layer.remove());
+      state.layers = [];
+    }
+
+    function addLayer(layer) {
+      layer.addTo(state.map);
+      state.layers.push(layer);
+    }
+
+    function stationLatLng(station) {
+      const y = num(field(station, ["y", "gpslati", "gpsLati", "lat", "latitude"]));
+      const x = num(field(station, ["x", "gpslong", "gpsLong", "lng", "longitude"]));
+      if (y && x) return [y, x];
+      return null;
+    }
+
+    function renderStations(rows) {
+      $("stations").innerHTML = "";
+      [...rows].sort((a, b) => {
+        const ar = field(a, ["regionName"], "");
+        const br = field(b, ["regionName"], "");
+        return (br === "파주") - (ar === "파주");
+      }).slice(0, 30).forEach((station) => {
+        const name = field(station, ["stationName", "stationNm", "sttnNm"], "이름 없음");
+        const id = field(station, ["stationId", "sttnId", "nodeid"], "");
+        const no = field(station, ["mobileNo", "stationNo", "sttnNo", "arsId"], "");
+        const pos = stationLatLng(station);
+        const div = document.createElement("button");
+        div.className = "item secondary";
+        div.innerHTML = `<div class="item-title"><span>${name}</span><span>${no}</span></div><div class="item-sub">ID ${id}${pos ? ` · ${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}` : ""}</div>`;
+        div.onclick = () => selectStation(station);
+        $("stations").appendChild(div);
+      });
+    }
+
+    function renderRoutes(rows) {
+      $("routes").innerHTML = "";
+      rows.slice(0, 80).forEach((route) => {
+        const routeName = field(route, ["routeName", "routeNm", "busRouteNm"], "노선");
+        const type = field(route, ["routeTypeName", "routeTypeCd", "regionName"], "");
+        const id = field(route, ["routeId", "busRouteId"], "");
+        const div = document.createElement("button");
+        div.className = `item secondary ${state.route && routeKey(state.route) === routeKey(route) ? "selected" : ""}`;
+        div.innerHTML = `<div class="item-title"><span>${routeName}</span><span>${type}</span></div><div class="item-sub">Route ID ${id}</div>`;
+        div.onclick = () => selectRoute(route);
+        $("routes").appendChild(div);
+      });
+    }
+
+    const stationKey = () => field(state.station, ["stationId", "sttnId", "nodeid"], "");
+    const routeKey = (route) => field(route, ["routeId", "busRouteId"], "");
+    const routeNameOf = (route) => field(route, ["routeName", "routeNm", "busRouteNm"], "노선");
+    const historyKey = (route) => `${stationKey()}::${routeKey(route)}`;
+
+    function stats(route) {
+      const rows = state.history[historyKey(route)] || [];
+      if (!rows.length) return { count: 0, avg: 0, recent: "" };
+      const avg = rows.reduce((sum, row) => sum + row.errorMin, 0) / rows.length;
+      return { count: rows.length, avg, recent: new Date(rows[rows.length - 1].at).toLocaleString("ko-KR") };
+    }
+
+    function predictedMinutes(arrival) {
+      return num(field(arrival, ["predictTime1", "predictTime", "arrTime", "arrivalSec1"])) ?? null;
+    }
+
+    function stationCount(arrival) {
+      return num(field(arrival, ["locationNo1", "locationNo", "staOrder", "stationCount"]));
+    }
+
+    function arrivalMinutes(arrival, order) {
+      return num(field(arrival, order === 2 ? ["predictTime2", "arrTime2", "arrivalSec2"] : ["predictTime1", "predictTime", "arrTime", "arrivalSec1"]));
+    }
+
+    function arrivalLocationNo(arrival, order) {
+      return num(field(arrival, order === 2 ? ["locationNo2", "stationCount2"] : ["locationNo1", "locationNo", "stationCount"]));
+    }
+
+    function arrivalPlate(arrival, order) {
+      return field(arrival, order === 2 ? ["plateNo2", "vehId2", "lowPlate2"] : ["plateNo1", "vehId1", "lowPlate1"], "");
+    }
+
+    function routeArrival(route) {
+      const id = routeKey(route);
+      return state.arrivals.find((row) => field(row, ["routeId", "busRouteId"]) == id);
+    }
+
+    function correctedEta(arrival, route) {
+      const base = predictedMinutes(arrival);
+      const s = stats(route);
+      const left = stationCount(arrival);
+      const move = Number($("moveMin").value || 2.3);
+      const dwell = Number($("dwellMin").value || 0.45);
+      const simulation = left ? Math.max(1, left * (move + dwell)) : null;
+      if (base === null && simulation === null) return null;
+      const apiEta = base !== null ? base : simulation;
+      const blended = simulation !== null ? (apiEta * 0.7 + simulation * 0.3) : apiEta;
+      return Math.max(0, blended + s.avg);
+    }
+
+    function renderArrivals(rows) {
+      $("arrivals").innerHTML = "";
+      const filtered = state.route ? rows.filter((row) => field(row, ["routeId", "busRouteId"]) == routeKey(state.route)) : rows;
+      filtered.slice(0, 50).forEach((arrival) => {
+        const routeId = field(arrival, ["routeId", "busRouteId"], "");
+        const route = state.routes.find((r) => routeKey(r) == routeId) || state.route || arrival;
+        const routeName = routeNameOf(route) || field(arrival, ["routeName", "routeNm"], "노선");
+        const base = predictedMinutes(arrival);
+        const left = stationCount(arrival);
+        const eta = correctedEta(arrival, route);
+        const s = stats(route);
+        const key = historyKey(route);
+        if (!state.watches[key] && base !== null) {
+          state.watches[key] = { startedAt: Date.now(), predictedAtStart: base, routeName };
+          save();
+        }
+        const plate = field(arrival, ["plateNo1", "vehId1", "lowPlate1"], "");
+        const div = document.createElement("div");
+        div.className = "arrival";
+        div.innerHTML = `
+          <div class="route-no">${routeName}</div>
+          <div class="eta">${eta === null ? "정보 없음" : `${Math.round(eta)}분`} <small>보정 예상</small></div>
+          <div class="item-sub">
+            API ${base ?? "-"}분 · ${left ?? "-"}정류장 전 · 보정 ${s.avg >= 0 ? "+" : ""}${s.avg.toFixed(1)}분 · ${plate}
+          </div>
+          <div class="toolbar">
+            <button class="secondary" data-action="route">노선 지도</button>
+            <button class="warn" data-action="arrived">실제 도착</button>
+          </div>
+        `;
+        div.querySelector('[data-action="route"]').onclick = () => selectRoute(route);
+        div.querySelector('[data-action="arrived"]').onclick = () => markArrived(route);
+        $("arrivals").appendChild(div);
+      });
+      if (!filtered.length) $("arrivals").innerHTML = `<div class="status">표시할 도착정보가 없습니다.</div>`;
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const tbody = $("history");
+      tbody.innerHTML = "";
+      Object.entries(state.history).forEach(([key, rows]) => {
+        const avg = rows.reduce((sum, row) => sum + row.errorMin, 0) / rows.length;
+        const last = rows[rows.length - 1];
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${last.routeName}</td><td>${rows.length}</td><td class="${avg > 2 ? "danger" : "adjust"}">${avg >= 0 ? "+" : ""}${avg.toFixed(1)}분</td><td>${new Date(last.at).toLocaleDateString("ko-KR")}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (!tbody.children.length) tbody.innerHTML = `<tr><td colspan="4">아직 기록이 없습니다.</td></tr>`;
+    }
+
+    function markArrived(route) {
+      const key = historyKey(route);
+      const watch = state.watches[key];
+      if (!watch) {
+        alert("먼저 도착정보를 한 번 불러온 뒤 실제 도착을 기록해 주세요.");
+        return;
+      }
+      const elapsed = (Date.now() - watch.startedAt) / 60000;
+      const errorMin = elapsed - watch.predictedAtStart;
+      const row = { at: Date.now(), routeName: watch.routeName || routeNameOf(route), predicted: watch.predictedAtStart, actual: elapsed, errorMin };
+      state.history[key] = [...(state.history[key] || []), row].slice(-80);
+      delete state.watches[key];
+      save();
+      renderHistory();
+      refreshArrival();
+    }
+
+    async function selectStation(station) {
+      state.station = station;
+      state.route = null;
+      $("refreshArrival").disabled = false;
+      const name = field(station, ["stationName", "stationNm", "sttnNm"], "정류소");
+      const id = stationKey();
+      $("selectedText").textContent = `${name} · 정류소 ID ${id}`;
+      setStatus("경유 노선과 도착정보를 불러오는 중입니다.");
+      clearMap();
+      const pos = stationLatLng(station);
+      if (pos) {
+        addLayer(L.marker(pos).bindPopup(name));
+        state.map.setView(pos, 15);
+      }
+      try {
+        const [routes, arrivals] = await Promise.all([
+          api("via", { stationId: id }),
+          api("arrival_list", { stationId: id }),
+        ]);
+        state.routes = routes;
+        state.arrivals = arrivals;
+        renderRoutes(routes);
+        renderArrivals(arrivals);
+        setStatus(`${name} 기준 ${routes.length}개 노선, ${arrivals.length}개 도착정보를 확인했습니다.`);
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
+    async function selectRoute(route) {
+      state.route = route;
+      renderRoutes(state.routes);
+      renderArrivals(state.arrivals);
+      const id = routeKey(route);
+      setStatus(`${routeNameOf(route)} 노선 지도를 불러오는 중입니다.`);
+      try {
+        const [line, stops] = await Promise.all([
+          api("route_line", { routeId: id }),
+          api("route_stations", { routeId: id }),
+        ]);
+        state.routeLine = line;
+        state.routeStops = stops;
+        drawRoute(line, stops);
+        setStatus(`${routeNameOf(route)} 노선의 형상 ${line.length}개, 정류소 ${stops.length}개를 표시했습니다.`);
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
+    function drawRoute(line, stops) {
+      clearMap();
+      const points = line
+        .map((p) => {
+          const lat = num(field(p, ["y", "gpsY", "lat", "latitude"]));
+          const lng = num(field(p, ["x", "gpsX", "lng", "longitude"]));
+          return lat && lng ? [lat, lng] : null;
+        })
+        .filter(Boolean);
+      if (points.length) addLayer(L.polyline(points, { color: "#157e5c", weight: 5, opacity: .82 }));
+      stops.forEach((stop, index) => {
+        const lat = num(field(stop, ["y", "gpsY", "lat", "latitude"]));
+        const lng = num(field(stop, ["x", "gpsX", "lng", "longitude"]));
+        if (!lat || !lng) return;
+        const name = field(stop, ["stationName", "stationNm"], `정류소 ${index + 1}`);
+        const marker = L.circleMarker([lat, lng], { radius: 4, color: "#2367a2", fillColor: "#fff", fillOpacity: 1, weight: 2 }).bindPopup(name);
+        addLayer(marker);
+      });
+      const selectedPos = state.station ? stationLatLng(state.station) : null;
+      if (selectedPos) addLayer(L.marker(selectedPos).bindPopup("선택 정류소"));
+      drawArrivalBusMarkers(stops);
+      const boundsPoints = [...points, ...state.layers.filter((l) => l.getLatLng).map((l) => {
+        const ll = l.getLatLng();
+        return [ll.lat, ll.lng];
+      })];
+      if (boundsPoints.length) state.map.fitBounds(boundsPoints, { padding: [24, 24] });
+    }
+
+    function stopId(stop) {
+      return String(field(stop, ["stationId", "stationSeq", "stationId1", "sttnId"], ""));
+    }
+
+    function stopLatLng(stop) {
+      const lat = num(field(stop, ["y", "gpsY", "gpsLati", "lat", "latitude"]));
+      const lng = num(field(stop, ["x", "gpsX", "gpsLong", "lng", "longitude"]));
+      return lat && lng ? [lat, lng] : null;
+    }
+
+    function drawArrivalBusMarkers(stops) {
+      if (!state.route || !state.station || !stops.length) return;
+      const arrival = routeArrival(state.route);
+      if (!arrival) return;
+      const selectedId = stationKey();
+      const selectedIndex = stops.findIndex((stop) => stopId(stop) === String(selectedId));
+      if (selectedIndex < 0) return;
+
+      [1, 2].forEach((order) => {
+        const left = arrivalLocationNo(arrival, order);
+        if (!left || left < 0) return;
+        let busIndex = selectedIndex - left;
+        if (busIndex < 0) busIndex = stops.length + busIndex;
+        const stop = stops[busIndex];
+        const pos = stop ? stopLatLng(stop) : null;
+        if (!pos) return;
+        const minutes = arrivalMinutes(arrival, order);
+        const plate = arrivalPlate(arrival, order);
+        const stopName = field(stop, ["stationName", "stationNm"], "정류소");
+        const label = order === 1 ? "첫차" : "다음";
+        const icon = L.divIcon({
+          className: "",
+          html: `<div class="bus-pin ${order === 1 ? "first" : "second"}">${order}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        });
+        addLayer(L.marker(pos, { icon }).bindPopup(`${label} 위치 추정<br>${stopName}<br>${minutes ?? "-"}분 예정 ${plate ? `<br>${plate}` : ""}`));
+      });
+    }
+
+    async function refreshArrival() {
+      if (!state.station) return;
+      try {
+        state.arrivals = await api("arrival_list", { stationId: stationKey() });
+        renderArrivals(state.arrivals);
+        if (state.route && state.routeStops.length) drawRoute(state.routeLine, state.routeStops);
+        setStatus("도착정보를 새로 확인했습니다.");
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
+    $("searchStations").onclick = async () => {
+      const keyword = $("stationKeyword").value.trim();
+      if (!keyword) return;
+      setStatus("정류소를 검색하는 중입니다.");
+      try {
+        const rows = await api("stations", { keyword });
+        renderStations(rows);
+        setStatus(`${rows.length}개 정류소를 찾았습니다.`);
+      } catch (err) {
+        setStatus(err.message);
+      }
+    };
+    $("stationKeyword").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") $("searchStations").click();
+    });
+    $("refreshArrival").onclick = refreshArrival;
+    $("nearMe").onclick = () => {
+      if (!navigator.geolocation) return alert("이 브라우저에서 위치를 사용할 수 없습니다.");
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        setStatus("주변 정류소를 찾는 중입니다.");
+        try {
+          const rows = await api("around", { x: pos.coords.longitude, y: pos.coords.latitude });
+          renderStations(rows);
+          state.map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+          setStatus(`${rows.length}개 주변 정류소를 찾았습니다.`);
+        } catch (err) {
+          setStatus(err.message);
+        }
+      });
+    };
+    $("clearData").onclick = () => {
+      if (!confirm("저장된 관측 기록을 모두 지울까요?")) return;
+      state.watches = {};
+      state.history = {};
+      save();
+      renderHistory();
+      renderArrivals(state.arrivals);
+    };
+    ["moveMin", "dwellMin"].forEach((id) => $(id).addEventListener("input", () => renderArrivals(state.arrivals)));
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+      });
+    }
+
+    initMap();
+    renderHistory();
+    $("searchStations").click();
+  </script>
+</body>
+</html>

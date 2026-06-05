@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: paju-bus-predictor
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    autoDeploy: true
+    envVars:
+      - key: BUS_API_KEY
+        sync: false
